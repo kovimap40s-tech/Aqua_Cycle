@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi Siklus Air Interaktif & ESP32 Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Fredoka & Quicksand for Kid-Friendly UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK (v9/v10 Compat for RTDB Web) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        skyBlue: '#e0f2fe',
+                        cartoonSea: '#22d3ee',
+                        cartoonGrass: '#4ade80',
+                        cartoonSun: '#fbbf24',
+                    },
+                    fontFamily: {
+                        fredoka: ['Fredoka', 'sans-serif'],
+                        quicksand: ['Quicksand', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f0f9ff;
+        }
+        h1, h2, h3, .font-fun {
+            font-family: 'Fredoka', cursive;
+        }
+        /* Glassmorphism custom design */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(224, 242, 254, 0.8);
+            border-radius: 1.25rem;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e0f2fe;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #38bdf8;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="text-slate-700 min-h-screen pb-10">
+
+    <!-- Header Navigation Bar -->
+    <header class="bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 text-white shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white p-2 rounded-2xl shadow text-amber-500 text-2xl animate-bounce">
+                    <i class="fa-solid fa-cloud-sun-rain"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold tracking-wide">Aqua Cycle</h1>
+                    <p class="text-xs text-sky-100">Media Pembelajaran Sains SMP + IoT ESP32</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+                
+                <!-- Ganti tombol ini di bagian header -->
+            <button onclick="openWifiGuideModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-fun text-sm px-4 py-2 rounded-xl shadow-md transition transform hover:scale-105 flex items-center gap-2">
+                <i class="fa-solid fa-wifi"></i> Panduan Hubungkan WiFi & Alat
+            </button>
+            </div>
+
+            <!-- Header Actions -->
+            <div class="flex items-center space-x-2">
+                <span id="firebaseStatus" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-amber-900">
+                    <span class="w-2 h-2 mr-2 bg-amber-700 rounded-full animate-ping"></span> Menghubungkan...
+                </span>
+                <button onclick="openCodeModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-fun text-sm px-4 py-2 rounded-xl shadow-md transition transform hover:scale-105 flex items-center gap-2">
+                    <i class="fa-solid fa-code"></i> Kode ESP32
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT/TOP: Interactive Simulation Canvas (8 Columns on Large Screens) -->
+        <section class="lg:col-span-8 flex flex-col gap-4">
+            
+            <!-- Canvas Container -->
+            <div class="glass-card p-4 shadow-xl relative overflow-hidden flex flex-col items-center">
+                
+                <!-- Stage Title Overlay -->
+                <div class="w-full flex justify-between items-center mb-2 px-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold uppercase tracking-wider bg-sky-100 text-sky-700 px-3 py-1 rounded-full border border-sky-300">
+                            Visualisasi 2D
+                        </span>
+                        <h2 id="currentStageTitle" class="text-lg md:text-xl font-bold text-sky-900">
+                            Proses: Menunggu...
+                        </h2>
+                    </div>
+                    <span id="autoTimerBadge" class="hidden bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full animate-pulse border border-amber-300">
+                        <i class="fa-solid fa-stopwatch mr-1"></i> Auto: <span id="timerSec">20</span>s
+                    </span>
+                </div>
+
+                <!-- Simulation Interactive Canvas -->
+                <div class="w-full relative rounded-2xl overflow-hidden border-4 border-sky-200 bg-gradient-to-b from-sky-200 via-sky-100 to-blue-200 shadow-inner">
+                    <canvas id="waterCycleCanvas" class="w-full h-[360px] md:h-[460px] block cursor-pointer"></canvas>
+                    
+                    <!-- Cute Explanatory Banner -->
+                    <div id="stageDescriptionBox" class="absolute bottom-3 left-3 right-3 bg-white/90 backdrop-blur-md p-3 rounded-xl border border-sky-300 shadow-md text-sm text-slate-700 flex items-start gap-3 transition-all duration-300">
+                        <div class="text-3xl text-amber-500" id="stageIcon">☀️</div>
+                        <div>
+                            <h4 id="stageName" class="font-bold font-fun text-sky-900">1. Evaporasi & Transpirasi</h4>
+                            <p id="stageDesc" class="text-xs md:text-sm">Matahari memanaskan air laut & tumbuhan. Air menguap menjadi bintik-bintik uap air yang naik ke atas langit!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step Process Indicators -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-4">
+                    <button onclick="setStageManual(1)" id="stepBtn1" class="step-btn p-2 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-center transition flex flex-col items-center">
+                        <span class="text-xs font-bold text-amber-700">Tahap 1</span>
+                        <span class="text-xs font-bold text-slate-800">Evaporasi ☀️</span>
+                    </button>
+                    <button onclick="setStageManual(2)" id="stepBtn2" class="step-btn p-2 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-center transition flex flex-col items-center">
+                        <span class="text-xs font-bold text-slate-500">Tahap 2</span>
+                        <span class="text-xs font-bold text-slate-800">Kondensasi ☁️</span>
+                    </button>
+                    <button onclick="setStageManual(3)" id="stepBtn3" class="step-btn p-2 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-center transition flex flex-col items-center">
+                        <span class="text-xs font-bold text-slate-500">Tahap 3</span>
+                        <span class="text-xs font-bold text-slate-800">Presipitasi 🌧️</span>
+                    </button>
+                    <button onclick="setStageManual(4)" id="stepBtn4" class="step-btn p-2 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-center transition flex flex-col items-center">
+                        <span class="text-xs font-bold text-slate-500">Tahap 4</span>
+                        <span class="text-xs font-bold text-slate-800">Limpasan 🌊</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT/BOTTOM: Mode Selection & Control Center (4 Columns) -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Mode Selector Switcher -->
+            <div class="glass-card p-4 shadow-xl">
+                <h3 class="text-md font-bold text-sky-900 font-fun mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-sky-500"></i> Pilih Mode Operasi Web & ESP32
+                </h3>
+                
+                <div class="grid grid-cols-3 gap-2 p-1 bg-sky-100 rounded-2xl border border-sky-200">
+                    <button id="modeBtn1" onclick="switchMode(1)" class="py-2 px-1 text-center rounded-xl font-bold text-xs transition duration-200 bg-white text-sky-700 shadow">
+                        <i class="fa-solid fa-microchip block text-base mb-1"></i> Mode 1<br><span class="font-normal text-[10px]">Read Sensor</span>
+                    </button>
+                    <button id="modeBtn2" onclick="switchMode(2)" class="py-2 px-1 text-center rounded-xl font-bold text-xs transition duration-200 text-slate-600 hover:text-sky-700">
+                        <i class="fa-solid fa-gamepad block text-base mb-1"></i> Mode 2<br><span class="font-normal text-[10px]">Manual</span>
+                    </button>
+                    <button id="modeBtn3" onclick="switchMode(3)" class="py-2 px-1 text-center rounded-xl font-bold text-xs transition duration-200 text-slate-600 hover:text-sky-700">
+                        <i class="fa-solid fa-robot block text-base mb-1"></i> Mode 3<br><span class="font-normal text-[10px]">Auto Sim</span>
+                    </button>
+                </div>
+                
+                <p id="modeHelperText" class="text-xs text-slate-500 mt-3 bg-sky-50/60 p-2 rounded-lg border border-sky-100">
+                    <i class="fa-solid fa-circle-info text-sky-500"></i> <b>Mode 1 (Read Sensor):</b> Web membaca data riil dari sensor DHT22 & Rain ESP32 di Firebase.
+                </p>
+            </div>
+
+            <!-- MODE 1: Sensor Readings Telemetry Card -->
+            <div id="panelMode1" class="glass-card p-4 shadow-xl flex flex-col gap-3">
+                <h3 class="text-md font-bold text-sky-900 font-fun border-b border-sky-100 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-chart-line text-emerald-500 mr-1"></i> Telemetri Realtime</span>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">ESP32 Live</span>
+                </h3>
+
+                <!-- Temperature & Humidity Display Grid -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gradient-to-br from-amber-50 to-orange-50 p-3 rounded-xl border border-amber-200 flex flex-col items-center">
+                        <span class="text-xs font-bold text-amber-700">Suhu (DHT22)</span>
+                        <div class="flex items-baseline my-1">
+                            <span id="readSuhu" class="text-2xl font-bold text-amber-600 font-fun">--</span>
+                            <span class="text-xs text-amber-600 ml-1">°C</span>
+                        </div>
+                        <span id="suhuStatusBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">Checking...</span>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-blue-50 to-cyan-50 p-3 rounded-xl border border-blue-200 flex flex-col items-center">
+                        <span class="text-xs font-bold text-blue-700">Kelembaban</span>
+                        <div class="flex items-baseline my-1">
+                            <span id="readHum" class="text-2xl font-bold text-blue-600 font-fun">--</span>
+                            <span class="text-xs text-blue-600 ml-1">%</span>
+                        </div>
+                        <span id="humStatusBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">Checking...</span>
+                    </div>
+                </div>
+
+                <!-- Hardware Actuator States Grid -->
+                <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                        <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-lightbulb text-amber-500"></i> LED Sun</span>
+                        <span id="badgeLed" class="px-2 py-0.5 rounded font-bold bg-gray-200 text-gray-700">OFF</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                        <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-smog text-cyan-500"></i> Mist Maker</span>
+                        <span id="badgeMist" class="px-2 py-0.5 rounded font-bold bg-gray-200 text-gray-700">OFF</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                        <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-water text-blue-500"></i> Pompa Hujan</span>
+                        <span id="badgePompa" class="px-2 py-0.5 rounded font-bold bg-gray-200 text-gray-700">OFF</span>
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                        <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-cloud-rain text-indigo-500"></i> Rain (Digital)</span>
+                        <span id="badgeRain" class="px-2 py-0.5 rounded font-bold bg-gray-200 text-gray-700">Dry</span>
+                    </div>
+                </div>
+
+                <!-- IR Sensor extra telemetry -->
+                <div class="flex items-center justify-between p-2 rounded-lg bg-purple-50 border border-purple-200 text-xs">
+                    <span class="font-bold text-purple-900 flex items-center gap-1.5">
+                        <i class="fa-solid fa-eye text-purple-600"></i> Sensor IR (Deteksi Cahaya LED)
+                    </span>
+                    <span id="badgeIR" class="px-2.5 py-0.5 rounded-full font-bold bg-purple-200 text-purple-800">Tidak</span>
+                </div>
+            </div>
+
+            <!-- MODE 2: Manual Control Input Card -->
+            <div id="panelMode2" class="glass-card p-4 shadow-xl flex flex-col gap-3 hidden">
+                <h3 class="text-md font-bold text-sky-900 font-fun border-b border-sky-100 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-toggle-on text-purple-500 mr-1"></i> Control Manual UI</span>
+                    <span class="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">Write Mode</span>
+                </h3>
+
+                <!-- Temperature Slider -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <label for="manualSuhuSlider" class="text-amber-800">Simulasi Suhu (°C):</label>
+                        <span id="manualSuhuVal" class="text-amber-600 font-fun text-sm">31.0 °C</span>
+                    </div>
+                    <input type="range" id="manualSuhuSlider" min="25" max="40" step="0.5" value="31.0" 
+                           oninput="updateManualControls()" class="w-full accent-amber-500 cursor-pointer">
+                </div>
+
+                <!-- Humidity Slider -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <label for="manualHumSlider" class="text-blue-800">Simulasi Kelembaban (%):</label>
+                        <span id="manualHumVal" class="text-blue-600 font-fun text-sm">65 %</span>
+                    </div>
+                    <input type="range" id="manualHumSlider" min="30" max="100" step="1" value="65" 
+                           oninput="updateManualControls()" class="w-full accent-blue-500 cursor-pointer">
+                </div>
+
+                <!-- Manual Toggle Switches -->
+                <div class="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-sky-100">
+                    <button id="toggleLedBtn" onclick="toggleManualActuator('led')" class="p-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 font-bold flex items-center justify-between">
+                        <span>LED (Sun)</span> <span id="txtToggleLed">ON</span>
+                    </button>
+                    <button id="toggleMistBtn" onclick="toggleManualActuator('mist')" class="p-2 rounded-xl border border-cyan-300 bg-cyan-50 text-cyan-900 font-bold flex items-center justify-between">
+                        <span>Mist Maker</span> <span id="txtToggleMist">OFF</span>
+                    </button>
+                    <button id="togglePompaBtn" onclick="toggleManualActuator('pompa')" class="p-2 rounded-xl border border-blue-300 bg-blue-50 text-blue-900 font-bold flex items-center justify-between">
+                        <span>Pompa Air</span> <span id="txtTogglePompa">OFF</span>
+                    </button>
+                    <button id="toggleRainBtn" onclick="toggleManualActuator('rain')" class="p-2 rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-900 font-bold flex items-center justify-between">
+                        <span>Sensor Rain</span> <span id="txtToggleRain">Basah</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MODE 3: Auto Simulation Progress Info -->
+            <div id="panelMode3" class="glass-card p-4 shadow-xl flex flex-col gap-3 hidden">
+                <h3 class="text-md font-bold text-sky-900 font-fun border-b border-sky-100 pb-2 flex items-center justify-between">
+                    <span><i class="fa-solid fa-play text-emerald-500 mr-1"></i> Simulasi Otomatis (20s)</span>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Auto Cycle</span>
+                </h3>
+
+                <p class="text-xs text-slate-600">
+                    Animasi berjalan secara otomatis bergantian tiap 5 detik selama total 20 detik. ESP32 akan mengikuti status relay secara otomatis.
+                </p>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden border border-slate-300">
+                    <div id="autoProgressBar" class="bg-gradient-to-r from-sky-400 to-emerald-400 h-full w-0 transition-all duration-300"></div>
+                </div>
+
+                <div class="flex justify-between items-center text-xs font-bold text-slate-700 pt-1">
+                    <span>Status Siklus:</span>
+                    <span id="autoCycleStatusText" class="text-sky-600 font-fun">Tahap 1: Evaporasi</span>
+                </div>
+            </div>
+            
+        </section>
+
+    </main>
+
+    <!-- Full ESP32 Arduino Code Modal Window -->
+    <div id="codeModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl border-4 border-sky-300 overflow-hidden">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-sky-500 to-blue-600 text-white p-4 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-microchip text-2xl"></i>
+                    <h3 class="font-bold text-lg font-fun">Kode Program ESP32 Full (Firebase RTDB)</h3>
+                </div>
+                <button onclick="closeCodeModal()" class="text-white hover:text-red-200 text-2xl font-bold px-2">
+                    &times;
+                </button>
+            </div>
+
+            <!-- Modal Content (Preformatted Code) -->
+            <div class="p-4 overflow-y-auto bg-slate-900 text-slate-100 flex-1 font-mono text-xs">
+                <pre><code id="cppCodeContainer">
+/* 
+ * KODE PROGRAM ESP32 - SIMULASI SIKLUS AIR (FIREBASE REALTIME DATABASE)
+ * Terhubung ke Web App HTML5 Simulasi Siklus Air
+ * Sensor: DHT22, Sensor Hujan Digital (DO), Sensor IR (Digital)
+ * Actuator: Relay LED (Matahari), Relay Mist Maker, MOSFET Pompa Air, LCD I2C
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;FirebaseESP32.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;LiquidCrystal_I2C.h&gt;
+#include &lt;DHT.h&gt;
+
+// ===================== KONEKSI & FIREBASE CONFIG =====================
+#define WIFI_SSID "Axez"
+#define WIFI_PASSWORD "qazxswedc"
+
+#define FIREBASE_HOST "https://siklus-hujan-sefi-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define FIREBASE_AUTH "AIzaSyCAHWTxuIiIQ6o28MzFCjTnlJOlGZWpUsU" // Opsional jika Auth mati, atau isi Database Secret
+
+// ===================== PIN ESP32 =====================
+#define PIN_DHT          16   // DHT22 Data
+#define PIN_RELAY_LED    23   // Relay LED Matahari
+#define PIN_RELAY_MIST   19   // Relay Mist Maker
+#define PIN_POMPA        18   // MOSFET Pompa Air
+#define PIN_RAIN_DIGITAL 15   // Rain Sensor Pin Digital (DO)
+#define PIN_IR           4    // Sensor IR Digital
+#define PIN_SDA          21   // LCD SDA
+#define PIN_SCL          22   // LCD SCL
+
+const bool RELAY_AKTIF_LOW = true;
+const float SUHU_TARGET_MIN = 30.0;
+const float SUHU_TARGET_MAX = 32.0;
+
+#define DHTTYPE DHT22
+DHT dht(PIN_DHT, DHTTYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+// Variabel Sensor Realtime
+float suhu = 0.0;
+float hum = 0.0;
+bool rainDigital = false; // HIGH/LOW
+bool irTerdeteksi = false;
+
+// Status Output Hardware
+bool ledState = false;
+bool mistState = false;
+bool pompaState = false;
+
+// Multi-mode System Variables
+int activeMode = 1; // 1 = Read Sensor, 2 = Manual Mode, 3 = Auto Sim
+
+unsigned long tSensors = 0, tFirebase = 0, tLCD = 0;
+
+void relayTulis(uint8_t pin, bool nyala) {
+  bool level = RELAY_AKTIF_LOW ? !nyala : nyala;
+  digitalWrite(pin, level ? HIGH : LOW);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(PIN_RELAY_LED, OUTPUT);
+  pinMode(PIN_RELAY_MIST, OUTPUT);
+  pinMode(PIN_POMPA, OUTPUT);
+  pinMode(PIN_RAIN_DIGITAL, INPUT);
+  pinMode(PIN_IR, INPUT);
+
+  relayTulis(PIN_RELAY_LED, false);
+  relayTulis(PIN_RELAY_MIST, false);
+  digitalWrite(PIN_POMPA, LOW);
+
+  Wire.begin(PIN_SDA, PIN_SCL);
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0); lcd.print("Siklus Air ESP32");
+  lcd.setCursor(0, 1); lcd.print("Connecting WiFi..");
+
+  dht.begin();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected!");
+
+  config.host = FIREBASE_HOST;
+  config.signer.tokens.legacy_token = FIREBASE_AUTH;
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+
+  lcd.clear();
+  lcd.setCursor(0, 0); lcd.print("Firebase Ready!");
+  delay(1500);
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  // 1. Baca Sensor lokal tiap 1 detik
+  if (now - tSensors >= 1000) {
+    tSensors = now;
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    if (!isnan(t)) suhu = t;
+    if (!isnan(h)) hum = h;
+
+    // Digital Rain Sensor: LOW = Hujan/Basah pada modul konvensional (Pin DO)
+    rainDigital = (digitalRead(PIN_RAIN_DIGITAL) == LOW);
+    irTerdeteksi = (digitalRead(PIN_IR) == HIGH);
+  }
+
+  // 2. Baca Mode Aktif & Proses Logika Firebase (Tiap 400ms)
+  if (now - tFirebase >= 400) {
+    tFirebase = now;
+
+    if (Firebase.getInt(fbdo, "/system/active_mode")) {
+      if (fbdo.dataType() == "int") {
+        activeMode = fbdo.intData();
+      }
+    }
+
+    if (activeMode == 1) {
+      // ===== MODE 1: READ SENSOR MODE =====
+      // Logika otomatis berdasarkan suhu (30-32 C) dan kelembaban (>80%)
+      if (suhu >= SUHU_TARGET_MIN && suhu <= SUHU_TARGET_MAX) {
+        ledState = true;
+        mistState = true;
+      } else if (suhu > SUHU_TARGET_MAX) {
+        ledState = false;
+        mistState = false;
+      } else if (suhu < SUHU_TARGET_MIN) {
+        ledState = true;
+        mistState = false;
+      }
+
+      pompaState = (hum >= 80.0);
+
+      // Tulis data sensor lokal ke Firebase (/mode1_sensor)
+      Firebase.setFloat(fbdo, "/mode1_sensor/suhu", suhu);
+      Firebase.setFloat(fbdo, "/mode1_sensor/kelembaban", hum);
+      Firebase.setBool(fbdo, "/mode1_sensor/led", ledState);
+      Firebase.setBool(fbdo, "/mode1_sensor/mist", mistState);
+      Firebase.setBool(fbdo, "/mode1_sensor/pompa", pompaState);
+      Firebase.setBool(fbdo, "/mode1_sensor/rain_digital", rainDigital);
+      Firebase.setBool(fbdo, "/mode1_sensor/ir", irTerdeteksi);
+
+    } else if (activeMode == 2) {
+      // ===== MODE 2: MANUAL MODE =====
+      // Baca perintah langsung dari website (/mode2_manual)
+      if (Firebase.getBool(fbdo, "/mode2_manual/led")) ledState = fbdo.boolData();
+      if (Firebase.getBool(fbdo, "/mode2_manual/mist")) mistState = fbdo.boolData();
+      if (Firebase.getBool(fbdo, "/mode2_manual/pompa")) pompaState = fbdo.boolData();
+
+    } else if (activeMode == 3) {
+      // ===== MODE 3: AUTO SIMULATION MODE =====
+      // Baca status yang dikirim animasi web (/mode3_auto)
+      if (Firebase.getBool(fbdo, "/mode3_auto/led")) ledState = fbdo.boolData();
+      if (Firebase.getBool(fbdo, "/mode3_auto/mist")) mistState = fbdo.boolData();
+      if (Firebase.getBool(fbdo, "/mode3_auto/pompa")) pompaState = fbdo.boolData();
+    }
+
+    // Eksekusi Output Relay & Mosfet Hardware
+    relayTulis(PIN_RELAY_LED, ledState);
+    relayTulis(PIN_RELAY_MIST, mistState);
+    digitalWrite(PIN_POMPA, pompaState ? HIGH : LOW);
+  }
+
+  // 3. Update Tampilan LCD 16x2
+  if (now - tLCD >= 500) {
+    tLCD = now;
+    lcd.setCursor(0, 0);
+    lcd.print("M:"); lcd.print(activeMode);
+    lcd.print(" T:"); lcd.print(suhu, 1);
+    lcd.print("C H:"); lcd.print((int)hum); lcd.print("%  ");
+
+    lcd.setCursor(0, 1);
+    lcd.print("L:"); lcd.print(ledState ? "1" : "0");
+    lcd.print(" M:"); lcd.print(mistState ? "1" : "0");
+    lcd.print(" P:"); lcd.print(pompaState ? "1" : "0");
+    lcd.print(" IR:"); lcd.print(irTerdeteksi ? "Y" : "N");
+    lcd.print("  ");
+  }
+}
+                </code></pre>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 bg-slate-100 flex justify-between items-center border-t border-slate-200">
+                <span class="text-xs text-slate-500">Gunakan Library <b>FirebaseESP32</b> oleh Mobizt pada Arduino IDE.</span>
+                <button onclick="copyEspCode()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2">
+                    <i class="fa-solid fa-copy"></i> Salin Kode Program
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Panduan Koneksi WiFi & Database -->
+<div id="wifiGuideModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border-4 border-emerald-300 overflow-hidden animate-in fade-in zoom-in duration-200">
+        
+        <!-- Header Modal -->
+        <div class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-wifi text-2xl"></i>
+                <h3 class="font-bold text-lg font-fun">Panduan Menghubungkan Alat ke WiFi & Firebase</h3>
+            </div>
+            <button onclick="closeWifiGuideModal()" class="text-white hover:text-emerald-100 text-2xl font-bold px-2 leading-none">
+                &times;
+            </button>
+        </div>
+
+        <!-- Konten Panduan -->
+        <div class="p-5 overflow-y-auto space-y-4 text-sm text-slate-700 leading-relaxed">
+            
+            <!-- Tahap 1 -->
+            <div class="flex gap-3 items-start bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200">
+                <span class="w-7 h-7 bg-emerald-500 text-white font-bold rounded-xl flex items-center justify-center shrink-0 text-xs">1</span>
+                <div>
+                    <h4 class="font-bold text-emerald-950 font-fun">Sesuaikan SSID & Password Hotspot Anda</h4>
+                    
+                    <div class="mt-2 bg-slate-900 text-emerald-300 p-2.5 rounded-xl font-mono text-xs">
+                        WIFI SSID "Axez"<br>
+                        WIFI PASSWORD "qazxswedc"
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tahap 2 -->
+            
+
+        </div>
+
+        <!-- Footer Modal -->
+        <div class="p-3.5 bg-slate-100 flex justify-end items-center border-t border-slate-200">
+            <button onclick="closeWifiGuideModal()" class="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition">
+                Tutup Panduan
+            </button>
+        </div>
+    </div>
+</div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white px-4 py-3 rounded-2xl shadow-xl z-50 transition transform translate-y-20 opacity-0 flex items-center gap-2 text-sm">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toastMsg">Pesan Notifikasi</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // =========================================================================
+        // 1. FIREBASE INITIALIZATION (Sesuai Konfigurasi User)
+        // =========================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCAHWTxuIiIQ6o28MzFCjTnlJOlGZWpUsU",
+            authDomain: "siklus-hujan-sefi.firebaseapp.com",
+            databaseURL: "https://siklus-hujan-sefi-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "siklus-hujan-sefi",
+            storageBucket: "siklus-hujan-sefi.firebasestorage.app",
+            messagingSenderId: "224662325951",
+            appId: "1:224662325951:web:83ad861b5e03df5094140a",
+            measurementId: "G-RDFRCGNKR7"
+        };
+
+        let db = null;
+        let isFirebaseConnected = false;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+            
+            // Connection monitor
+            db.ref(".info/connected").on("value", (snap) => {
+                const statusBadge = document.getElementById("firebaseStatus");
+                if (snap.val() === true) {
+                    isFirebaseConnected = true;
+                    statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-400 text-emerald-950";
+                    statusBadge.innerHTML = `<span class="w-2 h-2 mr-2 bg-emerald-700 rounded-full animate-ping"></span> Terhubung RTDB`;
+                } else {
+                    isFirebaseConnected = false;
+                    statusBadge.className = "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-rose-400 text-rose-950";
+                    statusBadge.innerHTML = `<span class="w-2 h-2 mr-2 bg-rose-700 rounded-full"></span> Terputus`;
+                }
+            });
+
+        } catch (err) {
+            console.error("Firebase init error:", err);
+        }
+
+        // Global State Management
+        let currentMode = 1; // 1: Read Sensor, 2: Manual Control, 3: Auto Sim
+        let activeStage = 1; // 1: Evaporasi, 2: Kondensasi, 3: Presipitasi, 4: Limpasan
+
+        // State Sensor/Actuators
+        let stateData = {
+            suhu: 31.0,
+            kelembaban: 65,
+            led: true,
+            mist: true,
+            pompa: false,
+            rain_digital: false,
+            ir: true
+        };
+
+        // Automatic Simulation Timer Variables
+        let autoSimInterval = null;
+        let autoStepTimer = 20;
+
+        // =========================================================================
+        // 2. CANVAS ANIMATION ENGINE (Siklus Air Lucu 2D Vector)
+        // =========================================================================
+        const canvas = document.getElementById("waterCycleCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Canvas Responsive Resize Listener
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight || 420;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Particles System
+        let vaporParticles = [];
+        let rainParticles = [];
+        let riverWaterOffset = 0;
+        let sunEyeTimer = 0;
+
+        // Init Particles
+        for (let i = 0; i < 35; i++) {
+            vaporParticles.push({
+                x: Math.random() * 300,
+                y: Math.random() * 150 + 200,
+                radius: Math.random() * 4 + 2,
+                speedY: Math.random() * 1.5 + 0.5,
+                opacity: Math.random() * 0.7 + 0.3
+            });
+        }
+
+        for (let i = 0; i < 70; i++) {
+            rainParticles.push({
+                x: Math.random() * 250 + 100,
+                y: Math.random() * 200 + 80,
+                length: Math.random() * 12 + 8,
+                speedY: Math.random() * 6 + 4
+            });
+        }
+
+        // Draw Scene Function (Frame Loop)
+        function renderScene() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, w, h);
+
+            // 1. SKY & BACKGROUND GRADIENT
+            let skyGradient = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+            if (activeStage === 3) {
+                // Rain stage -> Rainy Grayish Sky
+                skyGradient.addColorStop(0, '#94a3b8');
+                skyGradient.addColorStop(1, '#cbd5e1');
+            } else {
+                skyGradient.addColorStop(0, '#bae6fd');
+                skyGradient.addColorStop(1, '#e0f2fe');
+            }
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, w, h);
+
+            // 2. CUTE SUN (Matahari Lucu)
+            const sunX = w * 0.85;
+            const sunY = h * 0.2;
+            const sunRadius = 42;
+
+            ctx.save();
+            // Sun Glow / Rays
+            if (stateData.led) {
+                ctx.beginPath();
+                ctx.arc(sunX, sunY, sunRadius + 14, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+                ctx.fill();
+            }
+
+            // Sun Body
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+            ctx.fillStyle = stateData.led ? '#fbbf24' : '#cbd5e1';
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = stateData.led ? '#f59e0b' : '#94a3b8';
+            ctx.stroke();
+
+            // Sun Cute Face
+            sunEyeTimer++;
+            const isBlinking = (sunEyeTimer % 120 > 110);
+
+            ctx.fillStyle = '#78350f';
+            if (isBlinking) {
+                // Blinking eyes
+                ctx.fillRect(sunX - 16, sunY - 4, 8, 2);
+                ctx.fillRect(sunX + 8, sunY - 4, 8, 2);
+            } else {
+                // Normal happy eyes
+                ctx.beginPath();
+                ctx.arc(sunX - 12, sunY - 4, 4, 0, Math.PI * 2);
+                ctx.arc(sunX + 12, sunY - 4, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Cheeks
+            ctx.beginPath();
+            ctx.arc(sunX - 18, sunY + 6, 5, 0, Math.PI * 2);
+            ctx.arc(sunX + 18, sunY + 6, 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.4)';
+            ctx.fill();
+
+            // Smile
+            ctx.beginPath();
+            ctx.arc(sunX, sunY + 4, 10, 0.1 * Math.PI, 0.9 * Math.PI, false);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#78350f';
+            ctx.stroke();
+            ctx.restore();
+
+            // 3. MOUNTAIN & LANDSCAPE (Gunung & Bukit)
+            // Left/Center Mountain
+            ctx.beginPath();
+            ctx.moveTo(w * 0.25, h * 0.7);
+            ctx.lineTo(w * 0.48, h * 0.28);
+            ctx.lineTo(w * 0.72, h * 0.7);
+            ctx.fillStyle = '#64748b';
+            ctx.fill();
+
+            // Snow Cap on Mountain
+            ctx.beginPath();
+            ctx.moveTo(w * 0.48, h * 0.28);
+            ctx.lineTo(w * 0.43, h * 0.37);
+            ctx.lineTo(w * 0.46, h * 0.39);
+            ctx.lineTo(w * 0.48, h * 0.36);
+            ctx.lineTo(w * 0.51, h * 0.4);
+            ctx.lineTo(w * 0.53, h * 0.37);
+            ctx.fillStyle = '#f8fafc';
+            ctx.fill();
+
+            // Green Hills
+            ctx.beginPath();
+            ctx.moveTo(0, h * 0.75);
+            ctx.quadraticCurveTo(w * 0.25, h * 0.55, w * 0.5, h * 0.72);
+            ctx.quadraticCurveTo(w * 0.75, h * 0.85, w, h * 0.7);
+            ctx.lineTo(w, h);
+            ctx.lineTo(0, h);
+            ctx.fillStyle = '#4ade80';
+            ctx.fill();
+
+            // 4. SEA & LAKE (Laut & Danau)
+            // Sea (Laut - Kanan)
+            ctx.beginPath();
+            ctx.moveTo(w * 0.65, h * 0.75);
+            ctx.lineTo(w, h * 0.7);
+            ctx.lineTo(w, h);
+            ctx.lineTo(w * 0.65, h);
+            ctx.fillStyle = '#06b6d4';
+            ctx.fill();
+
+            // Lake (Danau - Kiri)
+            ctx.beginPath();
+            ctx.ellipse(w * 0.18, h * 0.82, w * 0.12, h * 0.07, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.stroke();
+
+            // River Connection (Sungai dari Gunung ke Laut/Danau)
+            ctx.beginPath();
+            ctx.moveTo(w * 0.48, h * 0.5);
+            ctx.quadraticCurveTo(w * 0.42, h * 0.65, w * 0.35, h * 0.75);
+            ctx.quadraticCurveTo(w * 0.5, h * 0.8, w * 0.68, h * 0.82);
+            ctx.lineWidth = 14;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.stroke();
+
+            // Waterflow lines animation inside river (Limpasan)
+            if (activeStage === 4) {
+                riverWaterOffset = (riverWaterOffset + 1.5) % 20;
+                ctx.save();
+                ctx.setLineDash([8, 8]);
+                ctx.lineDashOffset = -riverWaterOffset;
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Cute Trees (Pohon-Pohon Kecil)
+            drawTree(w * 0.1, h * 0.72);
+            drawTree(w * 0.35, h * 0.68);
+            drawTree(w * 0.58, h * 0.71);
+
+            // 5. PROCESS 1: EVAPORASI & TRANSPIRASI (Mist Maker)
+            if (activeStage === 1 || stateData.mist) {
+                vaporParticles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x + w * 0.55, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+                    ctx.fill();
+
+                    // Particle Movement
+                    p.y -= p.speedY;
+                    if (p.y < h * 0.25) {
+                        p.y = h * 0.65 + Math.random() * 40;
+                        p.x = Math.random() * (w * 0.35);
+                    }
+                });
+            }
+
+            // 6. PROCESS 2 & 3: AWAN & KONDENSASI / PRESIPI TASI
+            const cloudX = w * 0.38;
+            const cloudY = h * 0.22;
+            const isDarkCloud = (activeStage === 3 || stateData.pompa);
+
+            drawCuteCloud(cloudX, cloudY, isDarkCloud ? '#64748b' : '#ffffff', 1.1);
+            drawCuteCloud(cloudX + 110, cloudY - 20, isDarkCloud ? '#475569' : '#ffffff', 0.85);
+
+            // 7. PROCESS 3: PRESI PITASI (HUJAN / POMPA AIR)
+            if (activeStage === 3 || stateData.pompa) {
+                rainParticles.forEach(r => {
+                    ctx.beginPath();
+                    ctx.moveTo(r.x + w * 0.15, r.y);
+                    ctx.lineTo(r.x + w * 0.15 - 2, r.y + r.length);
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    r.y += r.speedY;
+                    if (r.y > h * 0.75) {
+                        r.y = h * 0.22 + Math.random() * 20;
+                    }
+                });
+            }
+
+            // Labels Text on Canvas
+            ctx.font = 'bold 12px Fredoka';
+            ctx.fillStyle = '#0f172a';
+            ctx.fillText("Danau", w * 0.15, h * 0.88);
+            ctx.fillText("Laut", w * 0.82, h * 0.88);
+            ctx.fillText("Sungai", w * 0.45, h * 0.73);
+
+            requestAnimationFrame(renderScene);
+        }
+
+        // Helper Draw Cute Tree
+        function drawTree(x, y) {
+            ctx.fillStyle = '#78350f';
+            ctx.fillRect(x - 3, y - 10, 6, 12);
+            ctx.beginPath();
+            ctx.arc(x, y - 16, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#22c55e';
+            ctx.fill();
+        }
+
+        // Helper Draw Cute Cloud
+        function drawCuteCloud(x, y, color, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.beginPath();
+            ctx.arc(0, 0, 25, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.arc(25, -20, 30, Math.PI * 1, Math.PI * 1.85);
+            ctx.arc(60, -15, 22, Math.PI * 1.37, Math.PI * 1.91);
+            ctx.arc(75, 0, 22, Math.PI * 1.5, Math.PI * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Start Canvas Engine Loop
+        requestAnimationFrame(renderScene);
+
+        // =========================================================================
+        // 3. MULTI-MODE & FIREBASE RTDB CONTROLLER
+        // =========================================================================
+        
+        // Switch Operating Mode
+        function switchMode(modeNum) {
+            currentMode = modeNum;
+
+            // UI Button Active Toggles
+            [1, 2, 3].forEach(m => {
+                const btn = document.getElementById(`modeBtn${m}`);
+                const panel = document.getElementById(`panelMode${m}`);
+                if (m === modeNum) {
+                    btn.className = "py-2 px-1 text-center rounded-xl font-bold text-xs transition duration-200 bg-white text-sky-700 shadow border border-sky-300";
+                    panel.classList.remove("hidden");
+                } else {
+                    btn.className = "py-2 px-1 text-center rounded-xl font-bold text-xs transition duration-200 text-slate-600 hover:text-sky-700";
+                    panel.classList.add("hidden");
+                }
+            });
+
+            // Mode Helper Description Update
+            const helperText = document.getElementById("modeHelperText");
+            const badgeTimer = document.getElementById("autoTimerBadge");
+
+            if (modeNum === 1) {
+                helperText.innerHTML = `<i class="fa-solid fa-circle-info text-sky-500"></i> <b>Mode 1 (Read Sensor):</b> Web membaca data riil dari sensor DHT22 & Rain ESP32 di Firebase.`;
+                badgeTimer.classList.add("hidden");
+                stopAutoSimulation();
+                listenMode1SensorData();
+            } else if (modeNum === 2) {
+                helperText.innerHTML = `<i class="fa-solid fa-circle-info text-sky-500"></i> <b>Mode 2 (Manual):</b> Geser slider & sakelar untuk mengirim data uji coba ke ESP32.`;
+                badgeTimer.classList.add("hidden");
+                stopAutoSimulation();
+                updateManualControls();
+            } else if (modeNum === 3) {
+                helperText.innerHTML = `<i class="fa-solid fa-circle-info text-sky-500"></i> <b>Mode 3 (Auto Sim):</b> Animasi otomatis bergantian selama ~20 detik & mengontrol ESP32.`;
+                badgeTimer.classList.remove("hidden");
+                startAutoSimulation();
+            }
+
+            // Sync active mode decision to Firebase
+            if (isFirebaseConnected && db) {
+                db.ref("/system/active_mode").set(modeNum);
+            }
+        }
+
+        // MODE 1: Realtime Listener for ESP32 Sensor Data (/mode1_sensor)
+        function listenMode1SensorData() {
+            if (!isFirebaseConnected || !db) return;
+
+            db.ref("/mode1_sensor").on("value", (snapshot) => {
+                if (currentMode !== 1) return;
+                const data = snapshot.val();
+                if (!data) return;
+
+                stateData.suhu = data.suhu ?? 31.0;
+                stateData.kelembaban = data.kelembaban ?? 65;
+                stateData.led = !(data.led ?? true);
+                stateData.mist = data.mist ?? true;
+                stateData.pompa = data.pompa ?? false;
+                stateData.rain_digital = data.rain_digital ?? false;
+                stateData.ir = data.ir ?? true;
+
+                // Update UI Telemetry Cards
+                document.getElementById("readSuhu").innerText = stateData.suhu.toFixed(1);
+                document.getElementById("readHum").innerText = Math.round(stateData.kelembaban);
+
+                // Thermostat Badge Text
+                const sBadge = document.getElementById("suhuStatusBadge");
+                if (stateData.suhu >= 30.0 && stateData.suhu <= 32.0) {
+                    sBadge.className = "text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold";
+                    sBadge.innerText = "Target 30-32°C (Optimal)";
+                } else if (stateData.suhu > 32.0) {
+                    sBadge.className = "text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold";
+                    sBadge.innerText = "> 32°C (Panas/Overheat)";
+                } else {
+                    sBadge.className = "text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold";
+                    sBadge.innerText = "< 30°C (Dingin)";
+                }
+
+                // Humidity Badge Text
+                const hBadge = document.getElementById("humStatusBadge");
+                if (stateData.kelembaban >= 80) {
+                    hBadge.className = "text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold";
+                    hBadge.innerText = "≥ 80% (Turun Hujan)";
+                } else {
+                    hBadge.className = "text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold";
+                    hBadge.innerText = "< 80% (Cerah/Sedang)";
+                }
+
+                // Actuator Badges
+                updateBadge("badgeLed", stateData.led, "ON", "OFF");
+                updateBadge("badgeMist", stateData.mist, "ON", "OFF");
+                updateBadge("badgePompa", stateData.pompa, "ON", "OFF");
+                updateBadge("badgeRain", stateData.rain_digital, "Basah", "Kering");
+                
+                // IR Badge
+                const irB = document.getElementById("badgeIR");
+                irB.innerText = stateData.ir ? "Terdeteksi" : "Tidak";
+                irB.className = stateData.ir ? "px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800" : "px-2.5 py-0.5 rounded-full font-bold bg-gray-200 text-gray-700";
+
+                // Automatically map stage animation based on read sensor state
+                if (stateData.pompa) {
+                    setStageUI(3);
+                } else if (stateData.mist) {
+                    setStageUI(1);
+                } else if (stateData.suhu > 32) {
+                    setStageUI(2);
+                } else {
+                    setStageUI(4);
+                }
+            });
+        }
+
+        function updateBadge(id, state, textOn, textOff) {
+            const el = document.getElementById(id);
+            el.innerText = state ? textOn : textOff;
+            el.className = state 
+                ? "px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800"
+                : "px-2 py-0.5 rounded font-bold bg-slate-200 text-slate-600";
+        }
+
+        // MODE 2: Manual Control Slider & Toggle updates (/mode2_manual)
+        function updateManualControls() {
+            if (currentMode !== 2) return;
+
+            const suhuVal = parseFloat(document.getElementById("manualSuhuSlider").value);
+            const humVal = parseInt(document.getElementById("manualHumSlider").value);
+
+            document.getElementById("manualSuhuVal").innerText = suhuVal.toFixed(1) + " °C";
+            document.getElementById("manualHumVal").innerText = humVal + " %";
+
+            stateData.suhu = suhuVal;
+            stateData.kelembaban = humVal;
+
+            // Alur aturan:
+            // 1. Suhu 30-32 => LED ON, Mist ON
+            // 2. Suhu > 32 => LED OFF, Mist OFF
+            // 3. Hum >= 80% => Hujan (Pompa ON)
+            if (suhuVal >= 30.0 && suhuVal <= 32.0) {
+                stateData.led = true;
+                stateData.mist = true;
+            } else if (suhuVal > 32.0) {
+                stateData.led = false;
+                stateData.mist = false;
+            }
+
+            stateData.pompa = (humVal >= 80);
+
+            // Update Toggle Button Labels
+            document.getElementById("txtToggleLed").innerText = stateData.led ? "ON" : "OFF";
+            document.getElementById("txtToggleMist").innerText = stateData.mist ? "ON" : "OFF";
+            document.getElementById("txtTogglePompa").innerText = stateData.pompa ? "ON" : "OFF";
+            document.getElementById("txtToggleRain").innerText = stateData.rain_digital ? "Basah" : "Kering";
+
+            // Push to Firebase RTDB (/mode2_manual)
+            if (isFirebaseConnected && db) {
+                db.ref("/mode2_manual").set({
+                    suhu: stateData.suhu,
+                    kelembaban: stateData.kelembaban,
+                    led: !stateData.led,
+                    mist: stateData.mist,
+                    pompa: stateData.pompa,
+                    rain_digital: stateData.rain_digital
+                });
+            }
+
+            // Update Stage Visual
+            if (stateData.pompa) setStageUI(3);
+            else if (stateData.mist) setStageUI(1);
+            else setStageUI(2);
+        }
+
+        function toggleManualActuator(actuatorName) {
+            if (currentMode !== 2) return;
+            stateData[actuatorName] = !stateData[actuatorName];
+            updateManualControls();
+        }
+
+        // MODE 3: Sequential Automatic Simulation Loop (~20 Sec Total)
+        function startAutoSimulation() {
+            stopAutoSimulation();
+            autoStepTimer = 20;
+            document.getElementById("timerSec").innerText = autoStepTimer;
+
+            let step = 1;
+            runAutoStep(step);
+
+            autoSimInterval = setInterval(() => {
+                autoStepTimer--;
+                document.getElementById("timerSec").innerText = autoStepTimer;
+
+                // Progress bar fill
+                const progressPct = ((20 - autoStepTimer) / 20) * 100;
+                document.getElementById("autoProgressBar").style.width = `${progressPct}%`;
+
+                // Switch step every 5 seconds (20s / 4 steps)
+                if (autoStepTimer === 15) runAutoStep(2);
+                else if (autoStepTimer === 10) runAutoStep(3);
+                else if (autoStepTimer === 5) runAutoStep(4);
+                else if (autoStepTimer <= 0) {
+                    autoStepTimer = 20;
+                    runAutoStep(1);
+                }
+            }, 1000);
+        }
+
+        function runAutoStep(stepNum) {
+            setStageUI(stepNum);
+
+            const statusText = document.getElementById("autoCycleStatusText");
+
+            if (stepNum === 1) {
+                // Tahap 1: Evaporasi (Suhu 31C, LED ON, Mist ON)
+                statusText.innerText = "Tahap 1: Evaporasi & Transpirasi (LED/Mist ON)";
+                stateData.suhu = 31.0;
+                stateData.kelembaban = 60;
+                stateData.led = true;
+                stateData.mist = true;
+                stateData.pompa = false;
+            } else if (stepNum === 2) {
+                // Tahap 2: Kondensasi (Suhu 33C - Panas melampaui 32C -> LED & Mist OFF)
+                statusText.innerText = "Tahap 2: Kondensasi (Suhu >32°C -> LED & Mist OFF)";
+                stateData.suhu = 33.0;
+                stateData.kelembaban = 75;
+                stateData.led = false;
+                stateData.mist = false;
+                stateData.pompa = false;
+            } else if (stepNum === 3) {
+                // Tahap 3: Presipitasi / Hujan (Kelembaban 85% >= 80% -> Pompa ON)
+                statusText.innerText = "Tahap 3: Presipitasi Hujan (Kelembaban >80% -> Pompa ON)";
+                stateData.suhu = 29.5;
+                stateData.kelembaban = 88;
+                stateData.led = true;
+                stateData.mist = false;
+                stateData.pompa = true;
+            } else if (stepNum === 4) {
+                // Tahap 4: Limpasan / Infiltrasi (Air mengalir kembali ke laut)
+                statusText.innerText = "Tahap 4: Limpasan Air Sungai & Tanah";
+                stateData.suhu = 30.0;
+                stateData.kelembaban = 70;
+                stateData.led = true;
+                stateData.mist = false;
+                stateData.pompa = false;
+            }
+
+            // Write step override to Firebase (/mode3_auto)
+            if (isFirebaseConnected && db && currentMode === 3) {
+                db.ref("/mode3_auto").set({
+                    step: stepNum,
+                    suhu: stateData.suhu,
+                    kelembaban: stateData.kelembaban,
+                    led: !stateData.led,
+                    mist: stateData.mist,
+                    pompa: stateData.pompa
+                });
+            }
+        }
+
+        function stopAutoSimulation() {
+            if (autoSimInterval) {
+                clearInterval(autoSimInterval);
+                autoSimInterval = null;
+            }
+            document.getElementById("autoProgressBar").style.width = '0%';
+        }
+
+        // Manual Stage Button Click Handler
+        function setStageManual(stageNum) {
+            setStageUI(stageNum);
+            showToast(`Menampilkan Tahap ${stageNum}`);
+        }
+
+        // UI Stage Updates (Title, Description, Step Highlights)
+        function setStageUI(stageNum) {
+            activeStage = stageNum;
+
+            const title = document.getElementById("currentStageTitle");
+            const icon = document.getElementById("stageIcon");
+            const sName = document.getElementById("stageName");
+            const sDesc = document.getElementById("stageDesc");
+
+            // Step Button Highlights
+            [1, 2, 3, 4].forEach(i => {
+                const btn = document.getElementById(`stepBtn${i}`);
+                if (i === stageNum) {
+                    btn.className = "step-btn p-2 rounded-xl border-2 border-sky-400 bg-sky-100 text-center transition flex flex-col items-center shadow-md scale-105";
+                } else {
+                    btn.className = "step-btn p-2 rounded-xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 text-center transition flex flex-col items-center opacity-75";
+                }
+            });
+
+            switch (stageNum) {
+                case 1:
+                    title.innerText = "Proses 1: Evaporasi & Transpirasi";
+                    icon.innerText = "☀️";
+                    sName.innerText = "1. Evaporasi & Transpirasi";
+                    sDesc.innerText = "Suhu hangat (30-32°C) menyalakan LED & Mist Maker. Air laut dan tumbuhan menguap menjadi bintik uap air halus yang naik ke atas langit!";
+                    break;
+                case 2:
+                    title.innerText = "Proses 2: Kondensasi (Pembentukan Awan)";
+                    icon.innerText = "☁️";
+                    sName.innerText = "2. Kondensasi";
+                    sDesc.innerText = "Uap air di udara mendingin dan berkumpul membentuk awan. Ketika suhu tinggi (>32°C), LED pemanas otomatis mati.";
+                    break;
+                case 3:
+                    title.innerText = "Proses 3: Presipitasi (Hujan / Pompa Air)";
+                    icon.innerText = "🌧️";
+                    sName.innerText = "3. Presipitasi";
+                    sDesc.innerText = "Kelembaban udara tinggi (≥ 80%) membuat awan menjadi berat dan tebal. Pompa air menyala mengalirkan air hujan dari langit!";
+                    break;
+                case 4:
+                    title.innerText = "Proses 4: Limpasan & Infiltrasi";
+                    icon.innerText = "🌊";
+                    sName.innerText = "4. Limpasan & Infiltrasi";
+                    sDesc.innerText = "Air hujan jatuh ke tanah dan mengalir melalui sungai kembali ke laut dan danau. Siklus air siap berulang lagi!";
+                    break;
+            }
+        }
+
+        // =========================================================================
+        // 4. UTILITY FUNCTIONS (Modal & Toast)
+        // =========================================================================
+        function openCodeModal() {
+            document.getElementById("codeModal").classList.remove("hidden");
+        }
+
+        function closeCodeModal() {
+            document.getElementById("codeModal").classList.add("hidden");
+        }
+
+        function copyEspCode() {
+            const codeText = document.getElementById("cppCodeContainer").innerText;
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = codeText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand("copy");
+            document.body.removeChild(tempTextArea);
+            showToast("Kode ESP32 berhasil disalin!");
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            document.getElementById("toastMsg").innerText = msg;
+            toast.classList.remove("translate-y-20", "opacity-0");
+            setTimeout(() => {
+                toast.classList.add("translate-y-20", "opacity-0");
+            }, 3000);
+        }
+
+        // Start Default Mode
+        window.onload = function() {
+            switchMode(1);
+        };
+        // Fungsi Buka & Tutup Modal Panduan WiFi
+function openWifiGuideModal() {
+    document.getElementById("wifiGuideModal").classList.remove("hidden");
+}
+
+function closeWifiGuideModal() {
+    document.getElementById("wifiGuideModal").classList.add("hidden");
+}
+    </script>
+</body>
+</html>
